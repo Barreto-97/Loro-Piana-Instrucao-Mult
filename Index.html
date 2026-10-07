@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Instrução - Loro Piana</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+
+    <!-- Bibliotecas Necessárias (Mantidas do projeto anterior) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    
+    <!-- Configuração do Web Worker do PDF.js -->
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+
+    <style>
+        :root {
+            /* Tema Escuro (Padrão) */
+            --bg-0: #050c1f;
+            --bg-1: #0a1a44;
+            --glow-a: rgba(59, 111, 224, 0.28);
+            --glow-b: rgba(11, 41, 103, 0.55);
+            --card-bg: rgba(255, 255, 255, 0.045);
+            --card-border: rgba(255, 255, 255, 0.10);
+            --field-bg: rgba(255, 255, 255, 0.04);
+            --text-main: #f1f5fd;
+            --text-muted: #93a3c4;
+            --primary: #4f86f7;
+            --primary-2: #2f5fd0;
+            --primary-soft: rgba(79, 134, 247, 0.14);
+            --success: #1fb981;
+            --success-2: #0f9467;
+            --border: rgba(255, 255, 255, 0.12);
+            --log-bg: rgba(2, 8, 24, 0.75);
+            --log-text: #6ee7a8;
+            --log-bar: rgba(255, 255, 255, 0.05);
+            --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+            --focus: #8fb0ff;
+        }
+
+        body.light-theme {
+            /* Tema Claro */
+            --bg-0: #eef2fa;
+            --bg-1: #dde6f7;
+            --glow-a: rgba(79, 134, 247, 0.22);
+            --glow-b: rgba(11, 41, 103, 0.10);
+            --card-bg: rgba(255, 255, 255, 0.72);
+            --card-border: rgba(11, 41, 103, 0.12);
+            --field-bg: rgba(11, 41, 103, 0.035);
+            --text-main: #0b1b3d;
+            --text-muted: #55658a;
+            --primary: #0b2967;
+            --primary-2: #1a47a8;
+            --primary-soft: rgba(11, 41, 103, 0.08);
+            --success: #0f9467;
+            --success-2: #0b7a54;
+            --border: rgba(11, 41, 103, 0.16);
+            --log-bg: #0b1a3a;
+            --log-text: #6ee7a8;
+            --log-bar: rgba(255, 255, 255, 0.06);
+            --shadow: 0 20px 50px rgba(11, 41, 103, 0.14);
+            --focus: #1a47a8;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        html { background: var(--bg-0); }
+
+        body {
+            font-family: 'DM Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-main);
+            background:
+                radial-gradient(900px 520px at 85% -10%, var(--glow-a), transparent 60%),
+                radial-gradient(800px 600px at -10% 105%, var(--glow-b), transparent 60%),
+                linear-gradient(160deg, var(--bg-0), var(--bg-1));
+            background-attachment: fixed;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 2.5rem 1rem 1.5rem;
+            transition: color 0.3s;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 680px;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(18px);
+            padding: 1.75rem 2rem 2rem;
+        }
+
+        /* Cabeçalho */
+        .header-flex {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 1rem; padding-bottom: 1.5rem; margin-bottom: 1.75rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .brand { display: flex; align-items: center; min-width: 0; }
+        .logo { height: 46px; width: auto; display: block; }
+        .logo-dark-theme { display: block; }
+        .logo-light-theme { display: none; }
+        body.light-theme .logo-dark-theme { display: none; }
+        body.light-theme .logo-light-theme { display: block; }
+
+        .theme-btn {
+            background: var(--field-bg); border: 1px solid var(--border);
+            color: var(--text-main); padding: 0.5rem 0.95rem; border-radius: 999px;
+            cursor: pointer; font-family: inherit; font-size: 0.85rem; font-weight: 500;
+            white-space: nowrap; transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .theme-btn:hover { background: var(--primary-soft); border-color: var(--primary); }
+
+        .title-block { margin-bottom: 1.75rem; }
+        h1 { font-family: 'Syne', 'DM Sans', 'Segoe UI', sans-serif; font-size: 1.85rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; }
+        .subtitle { margin-top: 0.5rem; color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
+
+        /* Área de upload Dupla */
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .file-upload-wrapper { position: relative; }
+
+        .dropzone {
+            position: relative; display: flex; flex-direction: column; align-items: center;
+            gap: 0.6rem; padding: 1.9rem 1rem; border: 1.5px dashed var(--border);
+            border-radius: 14px; background: var(--field-bg); text-align: center;
+            transition: border-color 0.2s, background-color 0.2s, transform 0.2s;
+            height: 100%;
+        }
+
+        .dropzone:hover, .dropzone.is-over, .dropzone:focus-within {
+            border-color: var(--primary); background: var(--primary-soft);
+        }
+
+        .dropzone.is-over { transform: scale(1.01); }
+
+        .dropzone-icon {
+            width: 44px; height: 44px; border-radius: 12px; display: grid;
+            place-items: center; background: var(--primary-soft); color: var(--primary);
+        }
+        body:not(.light-theme) .dropzone-icon { color: var(--focus); }
+        .dropzone-icon svg { width: 22px; height: 22px; }
+
+        .dropzone-title { font-weight: 600; font-size: 0.95rem; }
+        .dropzone-hint { color: var(--text-muted); font-size: 0.8rem; }
+        .dropzone-hint strong { color: var(--success); }
+
+        .file-upload-input {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            opacity: 0; cursor: pointer;
+        }
+
+        .status-row { display: flex; align-items: center; justify-content: center; margin: 1.1rem 0 0.25rem; }
+        .status-text {
+            display: inline-block; padding: 0.35rem 0.9rem; border-radius: 999px;
+            background: var(--field-bg); border: 1px solid var(--card-border);
+            color: var(--text-muted); font-size: 0.88rem; text-align: center; width: 100%;
+        }
+
+        /* Botões */
+        .btn {
+            display: block; width: 100%; padding: 0.95rem; border-radius: 12px;
+            font-family: inherit; font-weight: 600; font-size: 1rem; cursor: pointer;
+            border: none; color: #ffffff; transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+        }
+        .btn-success {
+            margin-top: 1rem; background: linear-gradient(135deg, var(--success), var(--success-2));
+            box-shadow: 0 10px 24px rgba(15, 148, 103, 0.28);
+        }
+        .btn-success:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+
+        /* Log */
+        .log-panel {
+            margin-top: 1.5rem; border-radius: 14px; overflow: hidden;
+            border: 1px solid var(--card-border); background: var(--log-bg);
+        }
+        .log-bar {
+            display: flex; align-items: center; gap: 0.4rem; padding: 0.6rem 0.9rem;
+            background: var(--log-bar); border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            font-family: 'DM Mono', 'Courier New', monospace; font-size: 0.75rem; color: #8fa1c7;
+        }
+        .log-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); }
+        .log-bar span.log-label { margin-left: 0.4rem; }
+
+        textarea {
+            display: block; width: 100%; height: 200px; background: transparent;
+            color: var(--log-text); border: none; padding: 1rem;
+            font-family: 'DM Mono', 'Courier New', Courier, monospace; font-size: 0.82rem;
+            line-height: 1.55; resize: none; outline: none;
+        }
+        textarea::placeholder { color: #6f82ab; }
+        .footer { margin-top: 1.75rem; font-size: 0.82rem; color: var(--text-muted); text-align: center; }
+
+        :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        .dropzone:focus-within { outline: none; }
+
+        @media (max-width: 520px) {
+            .container { padding: 1.25rem 1.1rem 1.5rem; border-radius: 16px; }
+            .logo { height: 38px; }
+            h1 { font-size: 1.5rem; }
+            .theme-btn { padding: 0.45rem 0.75rem; font-size: 0.8rem; }
+            .upload-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header-flex">
+            <div class="brand">
+                <img class="logo logo-dark-theme" alt="DSV" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1OTMuMTYgMjg2LjI4Ij48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6I2ZmZjt9PC9zdHlsZT48L2RlZnM+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJtNDU4LjMyLDE5OS41NmMtMS40MiwyLjc2LTUuNjIsNy43My0xMi45LDcuNzNoLTI5LjkyYy03LjIzLDAtMTEuNTEtNS4wMi0xMi44LTcuNjZsLTQwLjUxLTgyLjE4Yy0zLjk4LTcuNzQtMTIuMzItMTAuMjMtMTkuMjktMTAuMjNoLTczLjU1Yy02Ljc4LDAtMTAuNzMsNC4zNC0xMC43MywxMC43MiwwLDYuNzksNC40MSwxMC43MiwxMC44NCwxMC43Mmg1MC42YzIxLjU1LDAsMzkuMzgsMTMuMDEsMzkuMzgsMzkuMzFzLTE4LjAxLDM5LjMxLTM5LjM4LDM5LjMxaC02NS4wM2MtNS45LDAtMTAuOC0zLjQxLTEwLjgtMTAuODV2LTE0LjE2YzAtMi40MSwxLjYyLTMuNTgsMy42LTMuNThoNTcuODRjNiwwLDEwLjgtMy42LDEwLjgtMTAuNzJzLTQuNzItMTAuNzMtMTAuNzgtMTAuNzNoLTU0LjRjLTkuMTIuMDEtMTcuNC0yLjQ3LTIzLjI1LTYuMzEtMywzNC44Ny0yNy45Nyw1Ni4zNi02NC40NSw1Ni4zNmgtODEuMzZjLTIsMC0zLjYtMS4xOS0zLjYtMy41N3YtNzEuNDdjMC0yLjM3LDEuNTgtMy41NiwzLjU0LTMuNTdoMjguNjRjNy42MywwLDExLjAzLDQuODksMTEuMDMsMTAuNjd2MzUuNzhoLjAyYzAsMi4zNywxLjU4LDMuNTYsMy41MywzLjU3LDcuNjYsMCwyNC44NCwwLDI0Ljg0LDAsMTkuNTUsMCwzNS44LTExLjgyLDM1LjgtMzUuNzNzLTE2LjE5LTM1Ljc0LTM1LjgtMzUuNzRoLTY4LjA5Yy0xLjk0LS4wMy0zLjUxLTEuMjEtMy41MS0zLjU4di0xNC4xOWMwLTguMDIsNS42OC0xMC44MiwxMC45MS0xMC44Mmg3NC40MmMyMC45NSwwLDM5LjksNy43NCw1MS4wNSwyMi4wMiw2LjA2LTE0LjUzLDE5LjYtMjIuMDIsMzYuNjItMjIuMDJoMTA2LjU4YzEzLjEsMCwyNy45Miw0LjQ5LDM1LjYzLDE5LjU4bDM0LjQ5LDcyLjI0Yy4zNS43NCwxLjA2LDEuMDksMS45MywxLjA5LjgsMCwxLjU1LS4zLDEuOTEtMS4wNSwwLDAsNDIuNjUtODkuNjEsNDIuOS05MC4xMi4yMi0uNDgsMS4xLTEuNzMsMy4xOC0xLjczaDMyLjhjMiwwLDMuNiwxLjE4LDMuNiwzLjU3LDAsLjY4LS4xMywxLjI2LS4zNSwxLjc1bC01NS45NywxMTUuNjJaIi8+PC9zdmc+">
+                <img class="logo logo-light-theme" alt="DSV" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz48c3ZnIGlkPSJMYXllcl8xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1OTMuMTYgMjg2LjI4Ij48ZGVmcz48c3R5bGU+LmNscy0xe2ZpbGw6IzBiMjk2Nzt9PC9zdHlsZT48L2RlZnM+PHBhdGggY2xhc3M9ImNscy0xIiBkPSJtNDU4LjMyLDE5OS41NmMtMS40MiwyLjc2LTUuNjIsNy43My0xMi45LDcuNzNoLTI5LjkyYy03LjIzLDAtMTEuNTEtNS4wMi0xMi44LTcuNjZsLTQwLjUxLTgyLjE4Yy0zLjk4LTcuNzQtMTIuMzItMTAuMjMtMTkuMjktMTAuMjNoLTczLjU1Yy02Ljc4LDAtMTAuNzMsNC4zNC0xMC43MywxMC43MiwwLDYuNzksNC40MSwxMC43MiwxMC44NCwxMC43Mmg1MC42YzIxLjU1LDAsMzkuMzgsMTMuMDEsMzkuMzgsMzkuMzFzLTE4LjAxLDM5LjMxLTM5LjM4LDM5LjMxaC02NS4wM2MtNS45LDAtMTAuOC0zLjQxLTEwLjgtMTAuODV2LTE0LjE2YzAtMi40MSwxLjYyLTMuNTgsMy42LTMuNThoNTcuODRjNiwwLDEwLjgtMy42LDEwLjgtMTAuNzJzLTQuNzItMTAuNzMtMTAuNzgtMTAuNzNoLTU0LjRjLTkuMTIuMDEtMTcuNC0yLjQ3LTIzLjI1LTYuMzEtMywzNC44Ny0yNy45Nyw1Ni4zNi02NC40NSw1Ni4zNmgtODEuMzZjLTIsMC0zLjYtMS4xOS0zLjYtMy41N3YtNzEuNDdjMC0yLjM3LDEuNTgtMy41NiwzLjU0LTMuNTdoMjguNjRjNy42MywwLDExLjAzLDQuODksMTEuMDMsMTAuNjd2MzUuNzhoLjAyYzAsMi4zNywxLjU4LDMuNTYsMy41MywzLjU3LDcuNjYsMCwyNC44NCwwLDI0Ljg0LDAsMTkuNTUsMCwzNS44LTExLjgyLDM1LjgtMzUuNzNzLTE2LjE5LTM1Ljc0LTM1LjgtMzUuNzRoLTY4LjA5Yy0xLjk0LS4wMy0zLjUxLTEuMjEtMy41MS0zLjU4di0xNC4xOWMwLTguMDIsNS42OC0xMC44MiwxMC45MS0xMC44Mmg3NC40MmMyMC45NSwwLDM5LjksNy43NCw1MS4wNSwyMi4wMiw2LjA2LTE0LjUzLDE5LjYtMjIuMDIsMzYuNjItMjIuMDJoMTA2LjU4YzEzLjEsMCwyNy45Miw0LjQ5LDM1LjYzLDE5LjU4bDM0LjQ5LDcyLjI0Yy4zNS43NCwxLjA2LDEuMDksMS45MywxLjA5LjgsMCwxLjU1LS4zLDEuOTEtMS4wNSwwLDAsNDIuNjUtODkuNjEsNDIuOS05MC4xMi4yMi0uNDgsMS4xLTEuNzMsMy4xOC0xLjczaDMyLjhjMiwwLDMuNiwxLjE4LDMuNiwzLjU3LDAsLjY4LS4xMywxLjI2LS4zNSwxLjc1bC01NS45NywxMTUuNjJaIi8+PC9zdmc+">
+            </div>
+            <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">☀️ Tema Claro</button>
+        </div>
+
+        <div class="title-block">
+            <h1>Processamento de Invoice</h1>
+            <p class="subtitle">Anexe a base do Excel e o PDF Loro Piana para gerar a instrução de digitação de forma automática.</p>
+        </div>
+
+        <div class="upload-grid">
+            <!-- Box do Excel -->
+            <div class="file-upload-wrapper">
+                <div class="dropzone" id="dropzoneExcel">
+                    <div class="dropzone-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    </div>
+                    <div class="dropzone-title">Base Excel</div>
+                    <div class="dropzone-hint" id="hintExcel">Clique ou arraste (.xlsx)</div>
+                    <input type="file" id="excelFile" class="file-upload-input" accept=".xlsx, .xls" onchange="handleFileSelection()">
+                </div>
+            </div>
+
+            <!-- Box do PDF -->
+            <div class="file-upload-wrapper">
+                <div class="dropzone" id="dropzonePdf">
+                    <div class="dropzone-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-6"></path><path d="M12 15v-6"></path><path d="M15 15v-6"></path></svg>
+                    </div>
+                    <div class="dropzone-title">Invoice PDF</div>
+                    <div class="dropzone-hint" id="hintPdf">Clique ou arraste (.pdf)</div>
+                    <input type="file" id="pdfFile" class="file-upload-input" accept=".pdf" onchange="handleFileSelection()">
+                </div>
+            </div>
+        </div>
+
+        <div class="status-row">
+            <p class="status-text" id="statusLabel">Aguardando os 2 arquivos para liberação.</p>
+        </div>
+
+        <button class="btn btn-success" id="processBtn" onclick="processFiles()" disabled>Processar e Gerar Arquivo</button>
+
+        <div class="log-panel">
+            <div class="log-bar">
+                <span class="log-dot"></span><span class="log-dot"></span><span class="log-dot"></span>
+                <span class="log-label">log de sistema</span>
+            </div>
+            <textarea id="logArea" readonly placeholder="Painel de rastreabilidade..."></textarea>
+        </div>
+    </div>
+
+    <div class="footer">
+        By: Systems Departament - André Santos
+    </div>
+
+    <script>
+        // --- Controles de UI (Layout) ---
+
+        function toggleTheme() {
+            const body = document.body;
+            const themeBtn = document.getElementById("themeBtn");
+            body.classList.toggle("light-theme");
+            
+            if (body.classList.contains("light-theme")) {
+                themeBtn.innerText = "🌙 Tema Escuro";
+            } else {
+                themeBtn.innerText = "☀️ Tema Claro";
+            }
+            try {
+                localStorage.setItem("invoiceTheme", body.classList.contains("light-theme") ? "light" : "dark");
+            } catch (e) {}
+        }
+
+        (function restoreTheme() {
+            try {
+                if (localStorage.getItem("invoiceTheme") === "light") {
+                    document.body.classList.add("light-theme");
+                    document.getElementById("themeBtn").innerText = "🌙 Tema Escuro";
+                }
+            } catch (e) {}
+        })();
+
+        function applyDropzoneFeedback(zoneId) {
+            const zone = document.getElementById(zoneId);
+            ["dragenter", "dragover"].forEach(ev => zone.addEventListener(ev, () => zone.classList.add("is-over")));
+            ["dragleave", "drop"].forEach(ev => zone.addEventListener(ev, () => zone.classList.remove("is-over")));
+        }
+        applyDropzoneFeedback("dropzoneExcel");
+        applyDropzoneFeedback("dropzonePdf");
+
+        function log(message) {
+            const logArea = document.getElementById('logArea');
+            logArea.value += message + "\n";
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function handleFileSelection() {
+            const excelInput = document.getElementById('excelFile');
+            const pdfInput = document.getElementById('pdfFile');
+            const hintExcel = document.getElementById('hintExcel');
+            const hintPdf = document.getElementById('hintPdf');
+            const processBtn = document.getElementById('processBtn');
+            const statusLabel = document.getElementById('statusLabel');
+
+            let readyCount = 0;
+
+            if (excelInput.files.length > 0) {
+                hintExcel.innerHTML = `<strong>${excelInput.files[0].name}</strong>`;
+                readyCount++;
+            } else {
+                hintExcel.innerText = "Clique ou arraste (.xlsx)";
+            }
+
+            if (pdfInput.files.length > 0) {
+                hintPdf.innerHTML = `<strong>${pdfInput.files[0].name}</strong>`;
+                readyCount++;
+            } else {
+                hintPdf.innerText = "Clique ou arraste (.pdf)";
+            }
+
+            if (readyCount === 2) {
+                statusLabel.innerText = "Tudo pronto! Pressione o botão para gerar.";
+                processBtn.disabled = false;
+            } else {
+                statusLabel.innerText = "Aguardando os 2 arquivos para liberação.";
+                processBtn.disabled = true;
+            }
+        }
+
+
+        // --- Lógica de Processamento da Automação (100% Preservada) ---
+
+        async function extractTextFromPDF(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuffer)}).promise;
+            let fullText = "";
+
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const textContent = await page.getTextContent();
+                
+                let lastY = -1;
+                let currentLine = "";
+                
+                for (let item of textContent.items) {
+                    if (lastY !== item.transform[5] && lastY !== -1) {
+                        fullText += currentLine + "\n";
+                        currentLine = "";
+                    }
+                    currentLine += item.str;
+                    lastY = item.transform[5];
+                }
+                fullText += currentLine + "\n";
+            }
+            return fullText;
+        }
+
+        async function readExcelFile(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+            
+            let headerIdx = -1;
+            for (let i = 0; i < rawData.length; i++) {
+                if (rawData[i].includes("STYLE CODE NO")) {
+                    headerIdx = i;
+                    break;
+                }
+            }
+
+            if (headerIdx === -1) {
+                throw new Error("A coluna 'STYLE CODE NO' não foi encontrada na planilha base.");
+            }
+
+            const headers = rawData[headerIdx];
+            const dataRows = rawData.slice(headerIdx + 1);
+            
+            const dfBase = [];
+            for (let row of dataRows) {
+                let obj = {};
+                headers.forEach((header, index) => {
+                    obj[header] = row[index];
+                });
+                if (obj["STYLE CODE NO"] && obj["STYLE CODE NO"].toString().trim() !== "") {
+                    dfBase.push(obj);
+                }
+            }
+            return dfBase;
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        async function processFiles() {
+            const excelInput = document.getElementById('excelFile');
+            const pdfInput = document.getElementById('pdfFile');
+            const btn = document.getElementById('processBtn');
+
+            if (!excelInput.files.length || !pdfInput.files.length) {
+                alert("Selecione ambos os arquivos!");
+                return;
+            }
+
+            try {
+                btn.disabled = true;
+                btn.innerText = "Processando...";
+                
+                log("--- Iniciando Automação Loro Piana ---");
+                log(`Base: ${excelInput.files[0].name}`);
+                log(`PDF: ${pdfInput.files[0].name}`);
+
+                log("[1/4] Extraindo estrutura do PDF...");
+                const pdfText = await extractTextFromPDF(pdfInput.files[0]);
+                
+                const invMatch = pdfText.match(/26\d{6}\/\d{3}/);
+                const invoiceNum = invMatch ? invMatch[0] : "Desconhecido";
+                log(`> Número da Invoice Encontrado: ${invoiceNum}`);
+
+                log("[2/4] Lendo base Excel inteligentemente...");
+                const dfBase = await readExcelFile(excelInput.files[0]);
+                const finalData = [];
+                const pdfLines = pdfText.split('\n');
+
+                log("[3/4] Realizando Match e varredura de valores...");
+                
+                for (let row of dfBase) {
+                    let style = (row['STYLE CODE NO'] || "").toString().trim();
+                    let color = (row['Colore'] || "").toString().trim();
+                    
+                    let matchCode = style + color;
+                    let amountFound = "N/A";
+                    let fullPartnumber = matchCode;
+
+                    if (matchCode) {
+                        for (let line of pdfLines) {
+                            if (line.includes(matchCode)) {
+                                const pnRegex = new RegExp(`\\S*${escapeRegExp(matchCode)}\\S*`);
+                                const pnMatch = line.match(pnRegex);
+                                if (pnMatch) {
+                                    fullPartnumber = pnMatch[0];
+                                }
+                                
+                                const monetaryValues = line.match(/\b\d{1,3}(?:\.\d{3})*,\d{2}\b/g);
+                                if (monetaryValues && monetaryValues.length > 0) {
+                                    amountFound = monetaryValues[monetaryValues.length - 1];
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    finalData.push({
+                        "Proforma": invoiceNum,
+                        "Billing Date": row['INVOICE DATE'] || "N/A",
+                        "PACKING LIST": row['Rif. Packing'] || "N/A",
+                        "ITEM CODE(PARTNUMBER)": fullPartnumber,
+                        "import HC": row['NCM'] || "N/A",
+                        "Export HC": row['NCM'] || "N/A",
+                        "amount in BRL": amountFound,
+                        "net weight in KG": row['ITEM NET WIGHT KG'] || "N/A",
+                        "Packed Quantity": row['QUANTITY'] || "N/A"
+                    });
+                }
+
+                log("[4/4] Montando arquivo Excel final...");
+                const worksheet = XLSX.utils.json_to_sheet(finalData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Resultado");
+                
+                const safeInvoiceName = invoiceNum.replace(/\//g, '-');
+                const finalFileName = `Instrução Digitação Mult - ${safeInvoiceName}.xlsx`;
+                
+                XLSX.writeFile(workbook, finalFileName);
+
+                log(`[✓] Sucesso! Arquivo baixado: ${finalFileName}`);
+                alert("Processamento concluído com sucesso!");
+
+            } catch (error) {
+                console.error(error);
+                log(`[ERRO CRÍTICO] Falha no processamento: ${error.message}`);
+                alert("Ocorreu um erro: " + error.message);
+            } finally {
+                btn.innerText = "Processar e Gerar Arquivo";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
