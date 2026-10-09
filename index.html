@@ -484,7 +484,7 @@
                         "Proforma": invoiceNum,
                         "Billing Date": row['INVOICE DATE'] || "N/A",
                         "PACKING LIST": row['Rif. Packing'] || "N/A",
-                        "ITEM CODE(PARTNUMBER)": fullPartnumber,
+                        "ITEM CODE(PARTNUMBER)": row['STYLE CODE NO'] || "N/A",
                         "import HC": row['NCM'] || "N/A",
                         "Export HC": row['NCM'] || "N/A",
                         "amount in BRL": amountFound,
