@@ -254,9 +254,9 @@
                     <div class="dropzone-icon">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15v-6"></path><path d="M12 15v-6"></path><path d="M15 15v-6"></path></svg>
                     </div>
-                    <div class="dropzone-title">Invoice PDF</div>
-                    <div class="dropzone-hint" id="hintPdf">Clique ou arraste (.pdf)</div>
-                    <input type="file" id="pdfFile" class="file-upload-input" accept=".pdf" onchange="handleFileSelection()">
+                    <div class="dropzone-title">Invoice(s) PDF</div>
+                    <div class="dropzone-hint" id="hintPdf">Clique ou arraste (1 ou mais .pdf)</div>
+                    <input type="file" id="pdfFile" class="file-upload-input" accept=".pdf" multiple onchange="handleFileSelection()">
                 </div>
             </div>
         </div>
@@ -338,11 +338,14 @@
                 hintExcel.innerText = "Clique ou arraste (.xlsx)";
             }
 
-            if (pdfInput.files.length > 0) {
+            if (pdfInput.files.length === 1) {
                 hintPdf.innerHTML = `<strong>${pdfInput.files[0].name}</strong>`;
                 readyCount++;
+            } else if (pdfInput.files.length > 1) {
+                hintPdf.innerHTML = `<strong>${pdfInput.files.length} PDFs selecionados</strong>`;
+                readyCount++;
             } else {
-                hintPdf.innerText = "Clique ou arraste (.pdf)";
+                hintPdf.innerText = "Clique ou arraste (1 ou mais .pdf)";
             }
 
             if (readyCount === 2) {
@@ -438,19 +441,25 @@
                 
                 log("--- Iniciando Automação Loro Piana ---");
                 log(`Base: ${excelInput.files[0].name}`);
-                log(`PDF: ${pdfInput.files[0].name}`);
+                log(`PDFs selecionados: ${pdfInput.files.length}`);
 
-                log("[1/4] Extraindo estrutura do PDF...");
-                const pdfText = await extractTextFromPDF(pdfInput.files[0]);
-                
-                const invMatch = pdfText.match(/26\d{6}\/\d{3}/);
-                const invoiceNum = invMatch ? invMatch[0] : "Desconhecido";
-                log(`> Número da Invoice Encontrado: ${invoiceNum}`);
+                log("[1/4] Extraindo estrutura dos PDFs...");
+                const parsedPdfs = [];
+                for (let pdfFile of pdfInput.files) {
+                    const pdfText = await extractTextFromPDF(pdfFile);
+                    const invMatch = pdfText.match(/26\d{6}\/\d{3}/);
+                    const invoiceNum = invMatch ? invMatch[0] : "Desconhecido";
+                    
+                    parsedPdfs.push({
+                        invoiceNum: invoiceNum,
+                        lines: pdfText.split('\n')
+                    });
+                    log(`> ${pdfFile.name} -> Invoice: ${invoiceNum}`);
+                }
 
                 log("[2/4] Lendo base Excel inteligentemente...");
                 const dfBase = await readExcelFile(excelInput.files[0]);
                 const finalData = [];
-                const pdfLines = pdfText.split('\n');
 
                 log("[3/4] Realizando Match e varredura de valores...");
                 
@@ -460,28 +469,28 @@
                     
                     let matchCode = style + color;
                     let amountFound = "N/A";
-                    let fullPartnumber = matchCode;
+                    let matchedInvoice = "N/A";
 
                     if (matchCode) {
-                        for (let line of pdfLines) {
-                            if (line.includes(matchCode)) {
-                                const pnRegex = new RegExp(`\\S*${escapeRegExp(matchCode)}\\S*`);
-                                const pnMatch = line.match(pnRegex);
-                                if (pnMatch) {
-                                    fullPartnumber = pnMatch[0];
+                        for (let pdfObj of parsedPdfs) {
+                            let foundInThisPdf = false;
+                            for (let line of pdfObj.lines) {
+                                if (line.includes(matchCode)) {
+                                    matchedInvoice = pdfObj.invoiceNum;
+                                    const monetaryValues = line.match(/\b\d{1,3}(?:\.\d{3})*,\d{2}\b/g);
+                                    if (monetaryValues && monetaryValues.length > 0) {
+                                        amountFound = monetaryValues[monetaryValues.length - 1];
+                                    }
+                                    foundInThisPdf = true;
+                                    break;
                                 }
-                                
-                                const monetaryValues = line.match(/\b\d{1,3}(?:\.\d{3})*,\d{2}\b/g);
-                                if (monetaryValues && monetaryValues.length > 0) {
-                                    amountFound = monetaryValues[monetaryValues.length - 1];
-                                }
-                                break;
                             }
+                            if (foundInThisPdf) break;
                         }
                     }
 
                     finalData.push({
-                        "Proforma": invoiceNum,
+                        "Proforma": matchedInvoice,
                         "Billing Date": row['INVOICE DATE'] || "N/A",
                         "PACKING LIST": row['Rif. Packing'] || "N/A",
                         "ITEM CODE(PARTNUMBER)": row['STYLE CODE NO'] || "N/A",
@@ -498,8 +507,10 @@
                 const workbook = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(workbook, worksheet, "Resultado");
                 
-                const safeInvoiceName = invoiceNum.replace(/\//g, '-');
-                const finalFileName = `Instrução Digitação Mult - ${safeInvoiceName}.xlsx`;
+                const fileSuffix = parsedPdfs.length === 1 
+                    ? parsedPdfs[0].invoiceNum.replace(/\//g, '-') 
+                    : `Consolidado_${parsedPdfs.length}_Invoices`;
+                const finalFileName = `Instrução Digitação Mult - ${fileSuffix}.xlsx`;
                 
                 XLSX.writeFile(workbook, finalFileName);
 
